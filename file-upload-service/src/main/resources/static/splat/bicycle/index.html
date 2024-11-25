@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+    <title>인공지능 4조 가우시안 웹 뷰</title>
+    <meta charset="utf-8" />
+    <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no"
+    />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta
+            name="apple-mobile-web-app-status-bar-style"
+            content="black-translucent"
+    />
+    <style>
+        body {
+            overflow: hidden;
+            margin: 0;
+            height: 100vh;
+            width: 100vw;
+            font-family: sans-serif;
+            background: black;
+            text-shadow: 0 0 3px black;
+        }
+        a, body {
+            color: white;
+        }
+        #info {
+            z-index: 100;
+            position: absolute;
+            top: 10px;
+            left: 15px;
+        }
+        h3 {
+            margin: 5px 0;
+        }
+        p {
+            margin: 5px 0;
+            font-size: small;
+        }
+
+        .cube-wrapper {
+            transform-style: preserve-3d;
+        }
+
+        .cube {
+            transform-style: preserve-3d;
+            transform: rotateX(45deg) rotateZ(45deg);
+            animation: rotation 2s infinite;
+        }
+
+        .cube-faces {
+            transform-style: preserve-3d;
+            height: 80px;
+            width: 80px;
+            position: relative;
+            transform-origin: 0 0;
+            transform: translateX(0) translateY(0) translateZ(-40px);
+        }
+
+        .cube-face {
+            position: absolute;
+            inset: 0;
+            background: #0017ff;
+            border: solid 1px #ffffff;
+        }
+        .cube-face.top {
+            transform: translateZ(80px);
+        }
+        .cube-face.front {
+            transform-origin: 0 50%;
+            transform: rotateY(-90deg);
+        }
+        .cube-face.back {
+            transform-origin: 0 50%;
+            transform: rotateY(-90deg) translateZ(-80px);
+        }
+        .cube-face.right {
+            transform-origin: 50% 0;
+            transform: rotateX(-90deg) translateY(-80px);
+        }
+        .cube-face.left {
+            transform-origin: 50% 0;
+            transform: rotateX(-90deg) translateY(-80px) translateZ(80px);
+        }
+
+        @keyframes rotation {
+            0% {
+                transform: rotateX(45deg) rotateY(0) rotateZ(45deg);
+                animation-timing-function: cubic-bezier(
+                        0.17,
+                        0.84,
+                        0.44,
+                        1
+                );
+            }
+            50% {
+                transform: rotateX(45deg) rotateY(0) rotateZ(225deg);
+                animation-timing-function: cubic-bezier(
+                        0.76,
+                        0.05,
+                        0.86,
+                        0.06
+                );
+            }
+            100% {
+                transform: rotateX(45deg) rotateY(0) rotateZ(405deg);
+                animation-timing-function: cubic-bezier(
+                        0.17,
+                        0.84,
+                        0.44,
+                        1
+                );
+            }
+        }
+
+        .scene,
+        #message {
+            position: absolute;
+            display: flex;
+            top: 0;
+            right: 0;
+            left: 0;
+            bottom: 0;
+            z-index: 2;
+            height: 100%;
+            width: 100%;
+            align-items: center;
+            justify-content: center;
+        }
+        #message {
+            font-weight: bold;
+            font-size: large;
+            color: red;
+            pointer-events: none;
+        }
+
+        details {
+            font-size: small;
+
+        }
+
+        #progress {
+            position: absolute;
+            top: 0;
+            height: 5px;
+            background: blue;
+            z-index: 99;
+            transition: width 0.1s ease-in-out;
+        }
+
+        #quality {
+            position: absolute;
+            bottom: 10px;
+            z-index: 999;
+            right: 10px;
+        }
+
+        #caminfo {
+            position: absolute;
+            top: 10px;
+            z-index: 999;
+            right: 10px;
+        }
+        #canvas {
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+        }
+
+        #instructions {
+            background: rgba(0,0,0,0.6);
+            white-space: pre-wrap;
+            padding: 10px;
+            border-radius: 10px;
+            font-size: x-small;
+        }
+        body.nohf .nohf {
+            display: none;
+        }
+        body.nohf #progress, body.nohf .cube-face {
+            background: #ff9d0d;
+        }
+    </style>
+</head>
+<body>
+<script>
+    if(location.host.includes('hf.space')) document.body.classList.add('nohf');
+</script>
+<div id="info">
+    <h3 class="nohf">인공지능2 4조 가우시안 웹 뷰</h3>
+    <p>
+        <small class="nohf">
+            By <a href="https://twitter.com/antimatter15">Kevin Kwok</a>.
+            Code on
+            <a href="https://github.com/antimatter15/splat">Github</a
+            >.
+        </small>
+    </p>
+
+    <details>
+        <summary>마우스 또는 화살표 키를 사용하여 탐색할 수 있습니다.</summary>
+
+        <div id="instructions">이동 (화살표 키)
+            왼쪽/오른쪽 화살표 키: 좌우로 스트레이프 이동.
+            위쪽/아래쪽 화살표 키: 앞으로 전진/뒤로 후진.
+            스페이스 키: 점프.
+
+            카메라 각도 (WASD 키)
+            A/D 키: 카메라를 왼쪽/오른쪽으로 회전.
+            W/S 키: 카메라를 위/아래로 기울임(틸트).
+            Q/E 키: 카메라를 시계 방향/반시계 방향으로 롤 회전.
+            I/K 키와 J/L 키: 카메라 궤도를 따라 공전(Orbit).
+
+            트랙패드
+            스크롤(위/아래/좌/우): 카메라 궤도 이동(Orbit).
+            핀치(손가락 벌리기/오므리기): 앞으로 전진/뒤로 후진.
+            Ctrl 키 + 스크롤: 앞으로 전진/뒤로 후진.
+            Shift 키 + 스크롤: 위/아래 이동 또는 좌우로 스트레이프.
+
+            마우스
+            클릭 후 드래그: 카메라 궤도 이동.
+            오른쪽 클릭(또는 Ctrl/Cmd 키) + 드래그: 위/아래로 이동.
+
+            터치(모바일)
+            한 손가락 드래그: 카메라 궤도 이동.
+            두 손가락 핀치(벌리기/오므리기): 앞으로 전진/뒤로 후진.
+            두 손가락 회전: 카메라를 시계 방향/반시계 방향으로 회전.
+            두 손가락 팬: 카메라를 좌우 및 상하로 이동.
+
+            게임패드
+            게임 컨트롤러 연결 시 조작 가능.
+
+            기타
+            숫자 0~9 키: 미리 설정된 카메라 뷰로 전환.
+            - 또는 + 키: 로드된 카메라를 순환하며 선택.
+            P 키: 기본 애니메이션 재개.
+            .ply 파일 드래그 앤 드롭: .splat 형식으로 변환.
+            cameras.json 파일 드래그 앤 드롭: 카메라 설정 로드.
+        </div>
+
+    </details>
+
+</div>
+
+<div id="progress"></div>
+
+<div id="message"></div>
+<div class="scene" id="spinner">
+    <div class="cube-wrapper">
+        <div class="cube">
+            <div class="cube-faces">
+                <div class="cube-face bottom"></div>
+                <div class="cube-face top"></div>
+                <div class="cube-face left"></div>
+                <div class="cube-face right"></div>
+                <div class="cube-face back"></div>
+                <div class="cube-face front"></div>
+            </div>
+        </div>
+    </div>
+</div>
+<canvas id="canvas"></canvas>
+
+<div id="quality">
+    <span id="fps"></span>
+</div>
+<div id="caminfo">
+    <span id="camid"></span>
+</div>
+<script src="main.js"></script>
+</body>
+</html>
