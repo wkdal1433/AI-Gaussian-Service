@@ -638,13 +638,15 @@ async function main() {
     let carousel = true;
     const params = new URLSearchParams(location.search);
     const clientId = "{{clientId}}"; // 서버에서 동적으로 주입된 clientId를 사용
+    const outputUUID = "{{outputUUID}}"; // 서버에서 동적으로 주입된 outputUUID를 사용
 
-    if (!clientId) {
-        console.error("Client ID not provided in the index.html file.");
-        throw new Error("Client ID not provided in URL.");
+    if (!clientId || !outputUUID) {
+        console.error("Client ID or Output UUID not provided in the index.html file.");
+        throw new Error("Client ID or Output UUID not provided in URL.");
     }
 
-    const url = `./model.splat`; // 클라이언트별 splat 파일 경로
+    // outputUUID를 포함한 splat 파일의 경로 설정
+    const url = `./output/${outputUUID}/model.splat`;
     console.log("Loading splat file from:", url);
 
     try {
@@ -660,6 +662,7 @@ async function main() {
         mode: "cors", // no-cors, *cors, same-origin
         credentials: "omit", // include, *same-origin, omit
     });
+
     console.log(req);
     if (req.status != 200)
         throw new Error(req.status + " Unable to load " + req.url);

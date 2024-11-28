@@ -12,6 +12,7 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+
 @RestController
 @RequestMapping("/upload")
 public class FileUploadController {
@@ -42,6 +43,8 @@ public class FileUploadController {
         new File(clientViewerPath).mkdirs();
 
         try {
+            String outputUUID = "";
+
             // 업로드된 파일 저장
             for (MultipartFile file : files) {
                 File destination = new File(clientUploadPath, file.getOriginalFilename());
@@ -71,26 +74,107 @@ public class FileUploadController {
                 }
             } else {
                 // AI 모델 실행
-                ProcessBuilder pb = new ProcessBuilder(
-                        "python", "/path/to/gaussian_splatting.py",
-                        clientUploadPath, clientViewerPath + File.separator + "model.splat"
-                );
-                pb.redirectErrorStream(true);
-                Process process = pb.start();
+                String clientInputPath = clientUploadPath + File.separator + "input";
 
-                int exitCode = process.waitFor();
-                if (exitCode != 0) {
-                    throw new RuntimeException("AI model execution failed with exit code: " + exitCode);
+                try {
+                    // FFmpeg 명령 실행
+                    File inputFolder = new File(clientInputPath);
+                    if (!inputFolder.exists()) {
+                        inputFolder.mkdirs();
+                    }
+
+                    for (MultipartFile file : files) {
+                        File videoFile = new File(clientUploadPath, file.getOriginalFilename());
+                        if (!videoFile.getName().endsWith(".mp4") && !videoFile.getName().endsWith(".avi") && !videoFile.getName().endsWith(".MOV")) {
+                            throw new IllegalArgumentException("Uploaded file is not a supported video format.");
+                        }
+
+                        String videoFilePath = videoFile.getAbsolutePath();
+                        String[] ffmpegCommand = {
+                                "ffmpeg",
+                                "-i", videoFilePath,
+                                "-qscale:v", "1",
+                                "-qmin", "1",
+                                "-vf", "fps=3",
+                                clientInputPath + File.separator + "%04d.jpg"
+                        };
+
+                        ProcessBuilder ffmpegpb = new ProcessBuilder(ffmpegCommand);
+                        ffmpegpb.redirectErrorStream(true);
+                        Process process = ffmpegpb.start();
+
+                        BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+                        String line;
+                        while ((line = reader.readLine()) != null) {
+                            System.out.println(line);
+                        }
+
+                        int exitCode = process.waitFor();
+                        if (exitCode != 0) {
+                            throw new RuntimeException("FFmpeg process failed with exit code: " + exitCode);
+                        }
+                    }
+
+                    // Python 스크립트 convert.py 실행
+                    String condaEnv = "gaussian_splatting";
+                    String pythonScriptPathConvert = "C:/Users/user/Desktop/Gaussian/gaussian-splatting/convert.py";
+
+                    String[] pythonCommandConvert = new String[]{"cmd.exe", "/c", "conda activate " + condaEnv + " && python " + pythonScriptPathConvert + " -s " + clientUploadPath};
+
+                    ProcessBuilder convertpb = new ProcessBuilder(pythonCommandConvert);
+                    convertpb.redirectErrorStream(true);
+                    Process convertProcess = convertpb.start();
+
+                    BufferedReader convertReader = new BufferedReader(new InputStreamReader(convertProcess.getInputStream()));
+                    String line;
+                    while ((line = convertReader.readLine()) != null) {
+                        System.out.println(line);
+                    }
+
+                    int convertExitCode = convertProcess.waitFor();
+                    if (convertExitCode != 0) {
+                        throw new RuntimeException("convert.py script failed with exit code: " + convertExitCode);
+                    }
+
+                    // Python 스크립트 train.py 실행
+                    String pythonScriptPathTrain = "C:/Users/user/Desktop/Gaussian/gaussian-splatting/train.py";
+
+                    String[] pythonCommandTrain = new String[]{"cmd.exe", "/c", "conda activate " + condaEnv + " && python " + pythonScriptPathTrain + " -s " + clientUploadPath};
+
+                    ProcessBuilder trainpb = new ProcessBuilder(pythonCommandTrain);
+                    trainpb.redirectErrorStream(true);
+                    Process trainProcess = trainpb.start();
+
+                    BufferedReader trainReader = new BufferedReader(new InputStreamReader(trainProcess.getInputStream()));
+                    while ((line = trainReader.readLine()) != null) {
+                        System.out.println(line);
+                        if (line.startsWith("Output folder:")) {
+                            outputUUID = line.substring("Output folder: ./output/".length()).trim(); // 결과 경로 추출
+                            System.out.println(outputUUID);
+                        }
+                    }
+
+                    int trainExitCode = trainProcess.waitFor();
+                    if (trainExitCode != 0) {
+                        throw new RuntimeException("train.py script failed with exit code: " + trainExitCode);
+                    }
+
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    throw new RuntimeException("Failed to execute AI model processing pipeline.", e);
                 }
+                //AI 모델 실행 끝
             }
 
-            // 뷰어 파일 복사 및 clientId 동적 삽입
+            // 뷰어 파일 복사 및 clientId, outputUUID 동적 삽입
             try {
                 // 템플릿 index.html 로드
                 String indexTemplate = new String(Files.readAllBytes(Paths.get(viewerRoot + "/index.html")));
 
-                // 템플릿 내 {{clientId}}를 실제 clientId로 대체
-                String populatedIndex = indexTemplate.replace("{{clientId}}", clientId);
+                // 템플릿 내 {{clientId}} 및 {{outputUUID}}를 실제 값으로 대체
+                String populatedIndex = indexTemplate
+                        .replace("{{clientId}}", clientId)
+                        .replace("{{outputUUID}}", outputUUID);
 
                 // 클라이언트별 index.html 저장
                 Files.write(
@@ -109,20 +193,11 @@ public class FileUploadController {
                 e.printStackTrace();
                 throw new RuntimeException("Failed to create client-specific index.html", e);
             }
-//
-//
-//            // 모든 파일이 정상적으로 복사된 경우에만 Cloudflared 실행
-//            if (new File(clientViewerPath, "index.html").exists() &&
-//                    new File(clientViewerPath, "main.js").exists() &&
-//                    new File(clientViewerPath, "model.splat").exists()) {
-//                startCloudflared(clientId, clientViewerPath);
-//            } else {
-//                throw new RuntimeException("Required viewer files are missing.");
-//            }
-//            return ResponseEntity.ok(new UploadResponse(clientId));
+
+
             // 클라이언트별 HTML 경로 반환
             String viewerUrl = "/viewer/" + clientId + "/index.html";
-            return ResponseEntity.ok(new UploadResponse(clientId, viewerUrl));
+            return ResponseEntity.ok(new UploadResponse(clientId, viewerUrl, outputUUID));
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.status(500).body("File upload or processing failed.");
@@ -188,10 +263,12 @@ public class FileUploadController {
     public static class UploadResponse {
         private final String clientId;
         private final String viewerUrl;
+        private final String outputUUID; // outputUUID 필드 추가
 
-        public UploadResponse(String clientId, String viewerUrl) {
+        public UploadResponse(String clientId, String viewerUrl, String outputUUID) {
             this.clientId = clientId;
             this.viewerUrl = viewerUrl;
+            this.outputUUID = outputUUID;
         }
 
         public String getClientId() {
@@ -201,5 +278,11 @@ public class FileUploadController {
         public String getViewerUrl() {
             return viewerUrl;
         }
+
+        public String getOutputUUID() {
+            return outputUUID; // Getter 추가
+        }
     }
+
 }
+

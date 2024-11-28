@@ -178,19 +178,17 @@
 <script>
     // 서버에서 clientId를 동적으로 전달받음
     const clientId = "{{clientId}}";
+    const outputUUID = "{{outputUUID}}";
 
-    if (!clientId) {
-        console.error("Client ID not found in index.html.");
+    if (!clientId || !outputUUID) {
+        console.error("Client ID or Output UUID not found in index.html.");
     }
-
-    const url = `./model.splat`; // 클라이언트별 splat 파일 경로
-    console.log("Loading splat file for client:", clientId);
+    console.log("Loading splat file for client:", clientId, "with output UUID:", outputUUID);
 
     async function main() {
-        console.log("Initializing 3D viewer for client ID:", clientId);
+        console.log("Initializing 3D viewer for client ID:", clientId, "and output UUID:", outputUUID);
         // WebGL Viewer 초기화 로직 호출
     }
-
     window.onload = main;
 </script>
 <script src="main.js"></script>
